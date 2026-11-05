@@ -484,11 +484,14 @@ for _, a in pairs(state.auto) do
   end
 end
 
--- forget desktops that no longer exist
+-- forget desktops that no longer exist. Only when macOS actually reports some: right
+-- after login the list can come back empty, and pruning then would erase every name.
 local live, pruned = {}, false
 for _, e in ipairs(orderedSpaces()) do live[tostring(e.id)] = true end
-for _, t in ipairs({ state.custom, state.auto }) do
-  for k in pairs(t) do if not live[k] then t[k] = nil; pruned = true end end
+if next(live) then
+  for _, t in ipairs({ state.custom, state.auto }) do
+    for k in pairs(t) do if not live[k] then t[k] = nil; pruned = true end end
+  end
 end
 if pruned then save() end
 

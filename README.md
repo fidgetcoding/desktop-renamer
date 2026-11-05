@@ -144,10 +144,11 @@ Others got here first, so here's the honest lay of the land:
 ## Known limits
 
 - **macOS 26.** I measured Mission Control's layout on macOS 26 (Tahoe): a 72-point bar collapsed, 164 points expanded. Other versions may put the names a few points off, or skip them.
-- **Two permissions.** Accessibility lets Hammerspoon read window titles, see where Mission Control puts each label, and watch for the click or key that closes it. Screen Recording lets it sample the bar's colour so each name blends in. Without Screen Recording, the names sit on flat grey chips.
+- **Two permissions.** Accessibility lets Hammerspoon read window titles, see where Mission Control puts each label, and watch for the click or key that closes it. Screen Recording lets it sample the bar's colour so each name blends in. Without Screen Recording, the chips can't match the bar's colour.
 - **Visit first.** Hammerspoon only sees windows on desktops you've visited since it started. Names are saved, so the last known name shows until you visit that desktop again.
 - **One display.** I built and tested this with one display. Several displays aren't handled yet.
 - **Your titles stay local.** Names and the colour cache live in `~/.hammerspoon/desktop-names.json`, which holds your session titles. Keep that file out of any repo you share (this repo's `.gitignore` already skips it).
+- **Latin titles.** The status glyph is stripped by cutting leading non-ASCII characters, so a session title that starts in Cyrillic, Chinese or accented letters loses its first words.
 - **Ghostty only, so far.** Other terminals may work through `titleApps`, but I haven't tried them.
 
 ## Uninstall
