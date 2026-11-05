@@ -6,3 +6,6 @@ desktop-names.json
 .env.*
 *.pem
 *.key
+*.cert
+.vscode/
+.idea/
