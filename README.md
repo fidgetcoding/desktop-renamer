@@ -12,7 +12,7 @@
 
 **Real names on your desktops in Mission Control, so "Desktop 4" can finally say what it's for.**
 
-More: [EVOLUTION.md](EVOLUTION.md) (how it came together)
+More: [EVOLUTION.md](EVOLUTION.md) (how it came together) · [SECURITY.md](SECURITY.md) (what it can see on your Mac)
 
 <!-- TODO(screenshot): a real Mission Control screenshot with the names showing goes here.
 Save it as assets/screenshot.png, then replace this comment with:
@@ -144,7 +144,7 @@ Others got here first, so here's the honest lay of the land:
 ## Known limits
 
 - **macOS 26.** I measured Mission Control's layout on macOS 26 (Tahoe): a 72-point bar collapsed, 164 points expanded. Other versions may put the names a few points off, or skip them.
-- **Two permissions.** Accessibility lets Hammerspoon read where Mission Control puts each label, watch for the click or key that closes it, and run the hotkey. Screen Recording lets it sample the bar's colour so each name blends in. Without Screen Recording, the names sit on flat grey chips.
+- **Two permissions.** Accessibility lets Hammerspoon read window titles, see where Mission Control puts each label, and watch for the click or key that closes it. Screen Recording lets it sample the bar's colour so each name blends in. Without Screen Recording, the names sit on flat grey chips.
 - **Visit first.** Hammerspoon only sees windows on desktops you've visited since it started. Names are saved, so the last known name shows until you visit that desktop again.
 - **One display.** I built and tested this with one display. Several displays aren't handled yet.
 - **Your titles stay local.** Names and the colour cache live in `~/.hammerspoon/desktop-names.json`, which holds your session titles. Keep that file out of any repo you share (this repo's `.gitignore` already skips it).
