@@ -12,7 +12,7 @@
 
 **Real names on your desktops in Mission Control, so "Desktop 4" can finally say what it's for.**
 
-More: [EVOLUTION.md](EVOLUTION.md) (how it came together) · [SECURITY.md](SECURITY.md) (what it can see on your Mac)
+Short version: [ESSENCE.md](ESSENCE.md). How it got built: [EVOLUTION.md](EVOLUTION.md). What it can see on your Mac: [SECURITY.md](SECURITY.md).
 
 > [!NOTE]
 > **Heads up, this was fidgetcoded.** I built it for my own Mac in a day and it works great there. It reads Mission Control's layout at runtime, so a macOS update could knock the names a few points off. If that happens, open an issue with a screenshot and I'll look.
@@ -160,7 +160,7 @@ Reload Hammerspoon and Mission Control goes back to "Desktop N".
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
 
 ---
 
