@@ -188,7 +188,6 @@ end
 
 local TICK = 0.04
 local SETTLE = 0.2
-local FADE = 0.08
 local QUIET = 0.5
 local COLLAPSED_H = 72
 local FONT = hs.styledtext.defaultFonts.system.name
@@ -237,8 +236,8 @@ local function readBar()
 end
 
 local function hideAll()
-  if mc.drawn then dlog("hide from line " .. tostring(debug.getinfo(2, "l").currentline)) end
-  for _, c in ipairs(mc.pool) do if c:isShowing() then c:hide() end end
+  if mc.drawn then dlog("hide") end
+  for _, c in pairs(mc.pool) do c:hide() end
   mc.chips, mc.drawn = {}, false
 end
 
@@ -349,7 +348,8 @@ local function draw(L)
         { type = "text", frame = { x = 4, y = lines == 1 and (chip.h - sz.h) / 2 or 1, w = chip.w - 8, h = chip.h },
           text = hs.styledtext.new(text, { font = { name = FONT, size = size }, color = { white = 1 },
             paragraphStyle = { alignment = "center", lineBreak = "wordWrap" } }) })
-      c:show(FADE)
+      -- Interrupted canvas fades can leave alpha at zero on later shows.
+      c:alpha(1):show()
       mc.chips[i] = chip
     end
   end
@@ -384,7 +384,9 @@ local function tick()
   mc.topY = topY
   if rising then                                -- the bar is sliding away: Mission Control is closing
     dlog(string.format("rising topY=%.1f", topY))
-    mc.leaving = true
+    -- Hide during movement, but retry once the bar settles. AX movement
+    -- also happens when expanding/collapsing, not just when exiting.
+    mc.sig, mc.stillSince = nil, now
     return hideAll()
   end
   if sig ~= mc.sig then
@@ -475,6 +477,13 @@ end
 mc.dockCheck = hs.timer.doEvery(5, function()
   local dock = hs.application.get("com.apple.dock")
   if dock and dock:pid() ~= mc.dockPid then watchDock() end
+end)
+
+-- AX notifications can be missed. Reconcile against the actual Dock bar so
+-- neither a missed open nor a stale close leaves the overlay disabled.
+mc.reconcile = hs.timer.doEvery(0.3, function()
+  local _, list = spacesBar()
+  if list and not mc.timer then onOpen() end
 end)
 
 -- ── wiring ──────────────────────────────────────────────────────────────────────
