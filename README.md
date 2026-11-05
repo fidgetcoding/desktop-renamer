@@ -14,11 +14,6 @@
 
 More: [EVOLUTION.md](EVOLUTION.md) (how it came together) · [SECURITY.md](SECURITY.md) (what it can see on your Mac)
 
-<!-- TODO(screenshot): a real Mission Control screenshot with the names showing goes here.
-Save it as assets/screenshot.png, then replace this comment with:
-![Mission Control with named desktops](assets/screenshot.png)
--->
-
 > [!NOTE]
 > **Heads up, this was fidgetcoded.** I built it for my own Mac in a day and it works great there. It reads Mission Control's layout at runtime, so a macOS update could knock the names a few points off. If that happens, open an issue with a screenshot and I'll look.
 
