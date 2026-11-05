@@ -223,7 +223,10 @@ end
 local function readBar()
   local bar, list = spacesBar()
   if not list then return end
-  local barH = bar:attributeValue("AXFrame").h
+  -- Dock AX elements can disappear between reads during a transition.
+  local barFrame = bar and bar:attributeValue("AXFrame")
+  if not barFrame then return end
+  local barH = barFrame.h
   local frames, sig = {}, { string.format("%.0f", barH) }
   for i, b in ipairs(list:attributeValue("AXChildren") or {}) do
     local f = b:attributeValue("AXFrame")
@@ -483,7 +486,7 @@ end)
 -- neither a missed open nor a stale close leaves the overlay disabled.
 mc.reconcile = hs.timer.doEvery(0.3, function()
   local _, list = spacesBar()
-  if list and not mc.timer then onOpen() end
+  if list and (not mc.timer or not mc.timer:running()) then onOpen() end
 end)
 
 -- ── wiring ──────────────────────────────────────────────────────────────────────
