@@ -1,0 +1,8 @@
+# the name cache holds your window titles; it stays on your Mac
+desktop-names.json
+*.bak*
+.DS_Store
+.env
+.env.*
+*.pem
+*.key
