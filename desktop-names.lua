@@ -34,7 +34,7 @@ local SETTINGS = {
   -- only = these apps and nothing else. Names match loosely ("Telegram Desktop" = Telegram).
   categories = {
     { name = "Messaging", any = { "Messages", "Telegram", "Signal", "WhatsApp" } },
-    { name = "Browsing", only = { "Arc" } },
+    { name = "Browsing", only = { "Arc", "Google Chrome", "Safari", "Firefox", "Brave Browser", "Microsoft Edge", "Dia", "Comet", "Zen", "Orion" } },
   },
 
   -- no title and no category: show this many front apps, e.g. "Mail · Slack"
@@ -196,6 +196,14 @@ local FONT = hs.styledtext.defaultFonts.system.name
 local SHOT_KEYS = { hs.keycodes.map["3"], hs.keycodes.map["4"], hs.keycodes.map["5"], hs.keycodes.map["6"] }
 local mc = { pool = {}, chips = {} }
 M.mc = mc
+-- debug trace, off unless ~/.hammerspoon/desktop-names.debug exists (read at load)
+local DEBUG = hs.fs.attributes(os.getenv("HOME") .. "/.hammerspoon/desktop-names.debug") ~= nil
+local function dlog(msg)
+  if not DEBUG then return end
+  local o = io.open("/tmp/desktop-names-debug.log", "a")
+  if o then o:write(string.format("%.2f %s\n", hs.timer.secondsSinceEpoch(), msg)); o:close() end
+end
+M.dlog = dlog
 state.colors = state.colors or {}
 
 local function child(e, id)
@@ -229,6 +237,7 @@ local function readBar()
 end
 
 local function hideAll()
+  if mc.drawn then dlog("hide from line " .. tostring(debug.getinfo(2, "l").currentline)) end
   for _, c in ipairs(mc.pool) do if c:isShowing() then c:hide() end end
   mc.chips, mc.drawn = {}, false
 end
@@ -345,6 +354,7 @@ local function draw(L)
     end
   end
   mc.drawn, mc.drewAt = true, hs.timer.secondsSinceEpoch()
+  dlog(string.format("draw %d names expanded=%s", #mc.chips, tostring(L.expanded)))
 end
 
 local function follow(barH, frames)
@@ -373,6 +383,7 @@ local function tick()
   local rising = mc.topY and expanded == mc.expanded and topY < mc.topY - 1
   mc.topY = topY
   if rising then                                -- the bar is sliding away: Mission Control is closing
+    dlog(string.format("rising topY=%.1f", topY))
     mc.leaving = true
     return hideAll()
   end
@@ -410,6 +421,7 @@ mc.input = hs.eventtap.new({ hs.eventtap.event.types.leftMouseDown, hs.eventtap.
     if t == hs.eventtap.event.types.leftMouseUp then mc.shotUntil = now + 0.8 end
     return false
   end
+  dlog("input type=" .. t .. " key=" .. tostring(t == hs.eventtap.event.types.keyDown and e:getKeyCode() or "-"))
   mc.mouseDown = t == hs.eventtap.event.types.leftMouseDown
   mc.quietUntil, mc.sig = now + QUIET, nil
   hideAll()
@@ -422,6 +434,7 @@ function M.desktopChanged()
 end
 
 onClose = function()
+  dlog("close ticks=" .. tostring(mc.ticks))
   mc.input:stop()
   if mc.timer then mc.timer:stop(); mc.timer = nil end
   mc.sig, mc.mouseDown = nil, false
@@ -435,6 +448,7 @@ local function onOpen()
   mc.ticks, mc.sig, mc.mouseDown, mc.quietUntil, mc.expanded, mc.count = 0, nil, false, 0, nil, nil
   mc.seenBar, mc.leaving, mc.topY = false, false, nil
   mc.openedAt = hs.timer.secondsSinceEpoch()
+  dlog("open")
   hideAll()
   mc.input:start()
   mc.timer = hs.timer.doEvery(TICK, tick)
