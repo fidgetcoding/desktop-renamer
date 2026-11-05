@@ -26,6 +26,7 @@ All on 2026-11-05.
 | 12:15 | Messaging and Browsing categories |
 | 14:07 | Screenshot keys leave the names on screen |
 | later that day | Prior-art check, standalone version, public repo |
+| same evening | Banner: 53 options across 9 ideas, shortlist of three, "Color Code" picked |
 
 ## Round by round
 
