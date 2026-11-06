@@ -26,4 +26,4 @@
 - On a scripted close, the names were gone 11 ms after Mission Control closed. A real trackpad swipe hasn't been timed yet.
 - When my rules moved into the settings table, the new rule engine gave the same name as the old hard-coded one on all 512 combinations of nine apps.
 - A safety check on November 5 found no secrets or personal data in the files or the history, and no network or shell calls in the code. The file compiles under Lua 5.4.
-- There's no test suite or CI. It draws on top of a live macOS screen, so the checks above were done on a real one.
+- Lua regression checks cover overlay cleanup and simulated sleep/unlock recovery. Rendering checks still require a real macOS screen; there is no CI.

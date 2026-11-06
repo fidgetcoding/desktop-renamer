@@ -447,6 +447,7 @@ onClose = function()
 end
 
 local function onOpen()
+  if mc.suspended then return end
   if mc.timer then mc.timer:stop() end
   local wall = hs.screen.mainScreen():desktopImageURL()
   if state.colors.wallpaper ~= wall then state.colors = { wallpaper = wall } end
@@ -461,11 +462,11 @@ local function onOpen()
 end
 
 local function watchDock()
-  if mc.observer then mc.observer:stop() end
+  if mc.observer then mc.observer:stop(); mc.observer = nil end
+  mc.dockPid = nil
   local dock = hs.application.get("com.apple.dock")
   if not dock then return end
   local app = hs.axuielement.applicationElement(dock)
-  mc.dockPid = dock:pid()
   mc.observer = hs.axuielement.observer.new(dock:pid())
     :callback(function(_, _, note)
       if note == "AXExposeShowAllWindows" then onOpen() else onClose() end
@@ -473,21 +474,76 @@ local function watchDock()
     :addWatcher(app, "AXExposeShowAllWindows")
     :addWatcher(app, "AXExposeExit")
     :start()
+  mc.dockPid = dock:pid() -- only mark attached after all registrations succeed
 end
 
--- the observer dies with the Dock process, and a Dock relaunch posts no app-launch
--- event (seen 2026-11-05), so check the pid every few seconds and re-attach
-mc.dockCheck = hs.timer.doEvery(5, function()
-  local dock = hs.application.get("com.apple.dock")
-  if dock and dock:pid() ~= mc.dockPid then watchDock() end
-end)
+-- Sleep/unlock can invalidate native overlay windows and AX registrations even
+-- when Dock keeps its PID. Discard those objects, not the saved desktop names.
+local function resetSession()
+  onClose()
+  if mc.observer then mc.observer:stop(); mc.observer = nil end
+  mc.dockPid, mc.shotUntil = nil, nil
+  for _, c in pairs(mc.pool) do c:delete() end
+  mc.pool = {}
+  state.colors = {}
+  mc.recoveries = (mc.recoveries or 0) + 1
+end
 
--- AX notifications can be missed. Reconcile against the actual Dock bar so
--- neither a missed open nor a stale close leaves the overlay disabled.
-mc.reconcile = hs.timer.doEvery(0.3, function()
+-- Hammerspoon stops ordinary timers after a callback error. Keep the recovery
+-- loop alive through transient Dock/AX failures, and expose the error for diagnosis.
+local function guarded(fn)
+  return function(...)
+    local ok, err = pcall(fn, ...)
+    if not ok then
+      mc.lastError = tostring(err)
+      dlog("error: " .. mc.lastError)
+    end
+  end
+end
+
+local function reconcile()
+  if mc.suspended then return end
+  local dock = hs.application.get("com.apple.dock")
+  if not dock then
+    if mc.dockPid then resetSession() end
+    return
+  end
+  if dock:pid() ~= mc.dockPid or not mc.observer or not mc.observer:isRunning() then
+    resetSession()
+    watchDock()
+  end
   local _, list = spacesBar()
-  if list and (not mc.timer or not mc.timer:running()) then onOpen() end
-end)
+  if list then
+    if not mc.timer or not mc.timer:running() then onOpen() end
+    if not mc.input:isEnabled() then mc.input:start() end
+  elseif mc.timer then
+    onClose()
+  end
+end
+mc.reconcile = hs.timer.doEvery(0.3, guarded(reconcile))
+
+local events = hs.caffeinate.watcher
+M.sessionWatcher = events.new(guarded(function(event)
+  if event == events.systemWillSleep or event == events.screensDidLock
+      or event == events.sessionDidResignActive then
+    mc.suspended = true
+    resetSession()
+  elseif event == events.systemDidWake or event == events.screensDidUnlock
+      or event == events.sessionDidBecomeActive then
+    resetSession()
+    mc.suspended = false
+    -- The reconciliation loop retries until Dock is ready; no fixed login delay.
+  end
+end)):start()
+
+function M.status()
+  return {
+    suspended = mc.suspended == true, recoveries = mc.recoveries or 0,
+    observer = mc.observer ~= nil and mc.observer:isRunning(),
+    reconcile = mc.reconcile:running(), drawing = mc.drawn == true,
+    lastError = mc.lastError,
+  }
+end
 
 -- ── wiring ──────────────────────────────────────────────────────────────────────
 
@@ -521,6 +577,6 @@ if next(live) then
 end
 if pruned then save() end
 
-watchDock()
-learnFrontDesktop()
+guarded(reconcile)()
+guarded(learnFrontDesktop)()
 return M

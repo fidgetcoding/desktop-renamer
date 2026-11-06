@@ -146,6 +146,35 @@ Others got here first, so here's the honest lay of the land:
 - **Latin titles.** The status glyph is stripped by cutting leading non-ASCII characters, so a session title that starts in Cyrillic, Chinese or accented letters loses its first words.
 - **Ghostty only, so far.** Other terminals may work through `titleApps`, but I haven't tried them.
 
+## Recovery and diagnostics
+
+After sleep, screen unlock, or switching back to your login session, the add-on
+recreates its overlay windows and reconnects to the Dock. Saved desktop names stay
+intact. If the Dock is still starting or temporarily rejects an accessibility read,
+the recovery loop retries automatically. It also recovers missed open/close events
+and a stopped drawing timer.
+
+To inspect its state from the Hammerspoon Console:
+
+```lua
+require("desktop-names").status()
+```
+
+`observer` and `reconcile` should be true while your session is active. `drawing`
+is true only while names are drawn in Mission Control. `recoveries` counts native
+object resets; `lastError`, when present, records the most recent recovery-loop
+error (including an error it subsequently recovered from).
+
+Regression checks, from the checkout with Lua installed:
+
+```sh
+lua tests/hide-all.lua
+lua tests/session-recovery.lua
+```
+
+These test cleanup and simulated session transitions. Visual rendering still needs
+a check in Mission Control on macOS; they do not simulate an overnight sleep.
+
 ## Uninstall
 
 Delete the `require("desktop-names")` line from `~/.hammerspoon/init.lua`, then:

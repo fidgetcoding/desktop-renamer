@@ -158,3 +158,27 @@ Trap to remember: before 14:07, any screenshot of Mission Control showed plain "
 - Commits: `git log` of `fidgetcoding/desktop-renamer`.
 - [README.md](README.md) (Known limits, How it compares) and [SECURITY.md](SECURITY.md).
 - Private, kept by me: the build session notes and the launch session notes, both dated November 5, 2026.
+
+
+## 2026-11-06: recovery across lock and wake
+
+Reported: labels failed again after the Mac was left open overnight and unlocked.
+Hammerspoon was still running from the previous evening, its Dock observer reported
+active, and its timers were present. There was no session lifecycle watcher. Prior
+repairs handled missing Mission Control events and Dock PID changes, but retained
+native canvases and AX registrations across lock/unlock with the same Dock PID.
+This is a recovery gap; the live state alone does not establish which native object
+failed overnight.
+
+Changed: sleep/lock/session departure stops drawing and disposes of native overlays;
+wake/unlock/session return reconnects through a retry loop. Cached names are preserved,
+colors are sampled again, and failed AX attachments are retried. The loop catches
+callback errors so Hammerspoon cannot permanently stop it after a transient failure.
+It also handles missed closes and restarts disabled input taps while Mission Control
+is open. `status()` exposes observer/recovery health and the last recovery error.
+
+Validation: lifecycle regression checks cover sleep/wake, lock/unlock, user switching,
+same-PID reconnection, canvas disposal, saved-name preservation, Dock absence/restart,
+AX retry, missed close, disabled input, and stopped drawing timers. Existing cleanup
+regression checks also pass under Hammerspoon's Lua. An actual overnight cycle has
+not been reproduced in this session.
