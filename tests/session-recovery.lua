@@ -22,7 +22,7 @@ local env = setmetatable({ mc=mc, state=state, M=M, dlog=function() end,
     application={get=function() if ready then return {pid=function() return pid end} end end} },
   onClose=function() closed=closed+1; mc.timer=nil; mc.drawn=false end,
   onOpen=function() opened=opened+1; mc.timer=timer(); mc.drawn=true end,
-  spacesBar=function() if failAX then error('AX temporarily unavailable') end; return nil, bar and {} or nil end,
+  spacesBars=function() if failAX then error('AX temporarily unavailable') end; return bar and {{}} or {} end,
   watchDock=function()
     attached=attached+1
     if failAX then error('AX registration failed') end

@@ -182,3 +182,24 @@ same-PID reconnection, canvas disposal, saved-name preservation, Dock absence/re
 AX retry, missed close, disabled input, and stopped drawing timers. Existing cleanup
 regression checks also pass under Hammerspoon's Lua. An actual overnight cycle has
 not been reproduced in this session.
+
+
+## 2026-11-07: v0.1.1, external monitors
+
+Reported: names had worked for days, then broke the moment an external monitor was
+plugged in. The monitor's desktops got no names, and the laptop's desktops lost theirs.
+
+Cause, two bugs. Mission Control shows one row of desktop labels per display, but the
+overlay read only the first row and placed and coloured every name as if it sat on the
+laptop screen, pairing one display's label positions with the other's desktops. Name
+learning took the front windows from every display and filed them under the one
+focused desktop, so apps on the monitor renamed the laptop's desktop.
+
+Changed: every display's row is read, matched to its screen by position, and laid
+out, colour-sampled and drawn on its own (overlay state and colour cache are per
+screen; any screen's wallpaper change or a screen coming or going resets colours).
+Each display's front desktop learns its name only from windows on that display.
+
+Validation: both regression tests updated and passing under Hammerspoon's Lua; the
+module loads with no errors after a restart. Not yet seen live in Mission Control with
+the monitor attached.

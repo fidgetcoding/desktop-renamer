@@ -1,5 +1,5 @@
 -- desktop-names.lua — real names on the desktops in Mission Control.
--- https://github.com/fidgetcoding/desktop-renamer · MIT
+-- https://github.com/fidgetcoding/desktop-renamer · MIT · v0.1.1 (external monitors)
 --
 -- macOS has no API to rename Mission Control's "Desktop N" labels, so while Mission
 -- Control is open this draws each desktop's name over its label, filled with the bar's
@@ -42,6 +42,7 @@ local SETTINGS = {
 }
 
 local M = {}
+M.version = "0.1.1"
 M.settings = SETTINGS
 
 -- load extensions now, not on first use inside Mission Control: a lazy load prints a
