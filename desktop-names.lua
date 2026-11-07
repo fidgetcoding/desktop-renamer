@@ -161,6 +161,19 @@ function M.nameOf(spaceId, n)
   local g = windowTitle(spaceId)
   if g then M.remember(spaceId, g, "session"); return g, "session" end
   local a = state.auto[k]
+  -- a cached session title whose window now sits on another desktop is stale: the
+  -- window moved, so this desktop must not keep its name
+  if a and a.kind == "session" then
+    for _, w in ipairs(titleWindows:getWindows()) do
+      local t = stripGlyph(w:title())
+      for _, cut in ipairs(SETTINGS.titleCuts) do t = t:gsub(cut, "") end
+      if t == a.name then
+        M.remember(spaceId, nil)
+        a = nil
+        break
+      end
+    end
+  end
   if a then return a.name, a.kind end
   return "Desktop " .. (n or "?"), "default"
 end
