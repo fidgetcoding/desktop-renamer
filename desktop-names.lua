@@ -129,20 +129,29 @@ local function category(apps)
   end
 end
 
--- the front desktop's windows are always visible, so this is where the cache gets corrected
+-- each display's front desktop has its windows visible, so this is where the cache gets
+-- corrected. Windows count only toward the desktop of the screen they sit on, or a second
+-- monitor's apps would rename the laptop's desktop.
 local function learnFrontDesktop()
-  local sp = hs.spaces.focusedSpace()
-  if windowTitle(sp) then return end   -- M.nameOf caches it
-  local apps, have = {}, {}
-  for _, w in ipairs(hs.window.orderedWindows()) do
-    local app = w:application() and w:application():name()
-    if app and not have[app] and w:isStandard() then
-      have[app] = true
-      table.insert(apps, app)
+  local windows = hs.window.orderedWindows()
+  for _, scr in ipairs(hs.screen.allScreens()) do
+    local sp = hs.spaces.activeSpaceOnScreen(scr)
+    if sp and not windowTitle(sp) then   -- a titled desktop: M.nameOf caches it
+      local apps, have = {}, {}
+      for _, w in ipairs(windows) do
+        local app = w:application() and w:application():name()
+        if app and not have[app] and w:isStandard() and w:screen() == scr then
+          have[app] = true
+          table.insert(apps, app)
+        end
+      end
+      if #apps == 0 then
+        M.remember(sp, nil)
+      else
+        M.remember(sp, category(apps) or table.concat({ table.unpack(apps, 1, SETTINGS.frontApps) }, " · "), "apps")
+      end
     end
   end
-  if #apps == 0 then return M.remember(sp, nil) end
-  M.remember(sp, category(apps) or table.concat({ table.unpack(apps, 1, SETTINGS.frontApps) }, " · "), "apps")
 end
 
 function M.nameOf(spaceId, n)
@@ -193,7 +202,7 @@ local COLLAPSED_H = 72
 local FONT = hs.styledtext.defaultFonts.system.name
 
 local SHOT_KEYS = { hs.keycodes.map["3"], hs.keycodes.map["4"], hs.keycodes.map["5"], hs.keycodes.map["6"] }
-local mc = { pool = {}, chips = {} }
+local mc = { pool = {}, disp = {} }
 M.mc = mc
 -- debug trace, off unless ~/.hammerspoon/desktop-names.debug exists (read at load)
 local DEBUG = hs.fs.attributes(os.getenv("HOME") .. "/.hammerspoon/desktop-names.debug") ~= nil
@@ -211,37 +220,73 @@ local function child(e, id)
   end
 end
 
-local function spacesBar()
+-- with more than one display, mc holds one mc.display per screen, each with its own bar
+local function spacesBars()
   local dock = hs.application.get("com.apple.dock")
-  if not dock then return end
-  local e = hs.axuielement.applicationElement(dock)
-  for _, id in ipairs({ "mc", "mc.display", "mc.spaces" }) do e = child(e, id) end
-  return e, child(e, "mc.spaces.list")
-end
-
--- bar height, button frames, and a signature that changes whenever either does
-local function readBar()
-  local bar, list = spacesBar()
-  if not list then return end
-  -- Dock AX elements can disappear between reads during a transition.
-  local barFrame = bar and bar:attributeValue("AXFrame")
-  if not barFrame then return end
-  local barH = barFrame.h
-  local frames, sig = {}, { string.format("%.0f", barH) }
-  for i, b in ipairs(list:attributeValue("AXChildren") or {}) do
-    local f = b:attributeValue("AXFrame")
-    if f then
-      frames[i] = f
-      sig[#sig + 1] = string.format("%.0f,%.0f,%.0f", f.x, f.y, f.w)
+  if not dock then return {} end
+  local root = child(hs.axuielement.applicationElement(dock), "mc")
+  local out = {}
+  for _, d in ipairs((root and root:attributeValue("AXChildren")) or {}) do
+    if d:attributeValue("AXIdentifier") == "mc.display" then
+      local bar = child(d, "mc.spaces")
+      local list = child(bar, "mc.spaces.list")
+      if list then table.insert(out, { bar = bar, list = list }) end
     end
   end
-  return barH, frames, table.concat(sig, " ")
+  return out
+end
+
+-- the screen a bar sits on: the one containing its centre
+local function screenAt(f)
+  local cx, cy = f.x + f.w / 2, f.y + f.h / 2
+  for _, scr in ipairs(hs.screen.allScreens()) do
+    local s = scr:fullFrame()
+    if cx >= s.x and cx < s.x + s.w and cy >= s.y and cy < s.y + s.h then return scr end
+  end
+end
+
+-- per bar: screen, bar height, button frames, and a signature that changes whenever
+-- any of them does
+local function readBars()
+  local out = {}
+  for _, b in ipairs(spacesBars()) do
+    -- Dock AX elements can disappear between reads during a transition.
+    local barFrame = b.bar:attributeValue("AXFrame")
+    local scr = barFrame and screenAt(barFrame)
+    if scr then
+      local frames, sig = {}, { string.format("%.0f", barFrame.h) }
+      for i, e in ipairs(b.list:attributeValue("AXChildren") or {}) do
+        local f = e:attributeValue("AXFrame")
+        if f then
+          frames[i] = f
+          sig[#sig + 1] = string.format("%.0f,%.0f,%.0f", f.x, f.y, f.w)
+        end
+      end
+      table.insert(out, { scr = scr, id = scr:getUUID(), barH = barFrame.h, frames = frames,
+        sig = table.concat(sig, " ") })
+    end
+  end
+  return out
+end
+
+-- per-display overlay state, keyed by screen UUID: sig, stillSince, expanded, count,
+-- topY, drawn, chips
+local function disp(id)
+  mc.disp[id] = mc.disp[id] or { chips = {} }
+  return mc.disp[id]
+end
+
+local function hideDisplay(id)
+  local d = disp(id)
+  for i in pairs(d.chips) do if mc.pool[id .. ":" .. i] then mc.pool[id .. ":" .. i]:hide() end end
+  d.chips, d.drawn = {}, false
 end
 
 local function hideAll()
   if mc.drawn then dlog("hide") end
   for _, c in pairs(mc.pool) do c:hide() end
-  mc.chips, mc.drawn = {}, false
+  for _, d in pairs(mc.disp) do d.chips, d.drawn, d.sig = {}, false, nil end
+  mc.drawn = false
 end
 
 local function measure(text, size) return hs.drawing.getTextDrawingSize(text, { font = FONT, size = size }) end
@@ -285,17 +330,18 @@ local function labelRects(barH, frames)
 end
 
 -- rects plus the colour-cache key per label (the current desktop's label sits on a highlight)
-local function layout(barH, frames)
-  local scr = hs.screen.mainScreen()
+local function layout(B)
+  local scr = B.scr
   local spaces = hs.spaces.spacesForScreen(scr) or {}
   local cur = hs.spaces.activeSpaceOnScreen(scr)
-  local rects, expanded = labelRects(barH, frames)
+  local rects, expanded = labelRects(B.barH, B.frames)
+  local origin = scr:fullFrame()
   local keys = {}
   for i, r in ipairs(rects) do
-    keys[i] = string.format("%s%d%s", expanded and "e" or "c", math.floor((r.x + r.w / 2) / 8),
-      (not expanded and spaces[i] == cur) and "h" or "")
+    keys[i] = string.format("%s%s%d%s", B.id:sub(1, 8), expanded and "e" or "c",
+      math.floor((r.x - origin.x + r.w / 2) / 8), (not expanded and spaces[i] == cur) and "h" or "")
   end
-  return { scr = scr, spaces = spaces, rects = rects, expanded = expanded, keys = keys }
+  return { scr = scr, id = B.id, origin = origin, spaces = spaces, rects = rects, expanded = expanded, keys = keys }
 end
 
 local function allCached(L)
@@ -303,25 +349,27 @@ local function allCached(L)
   return true
 end
 
--- just left of the label text is the bar, or the highlight pill; only while nothing of ours shows
+-- just left of the label text is the bar, or the highlight pill; only while nothing of ours
+-- shows. Snapshot rects are relative to the screen, label rects are global.
 local function sampleColors(L, barH)
-  local w = L.scr:frame().w
+  local w = L.origin.w
   local img = L.scr:snapshot({ x = 0, y = 0, w = w, h = barH })
   if not img then return end
   local k = img:size().w / w
   for i, r in ipairs(L.rects) do
-    local c = img:colorAt({ x = math.floor((r.x - (L.expanded and 8 or 5)) * k), y = math.floor((r.y + r.h / 2) * k) })
+    local c = img:colorAt({ x = math.floor((r.x - L.origin.x - (L.expanded and 8 or 5)) * k),
+      y = math.floor((r.y - L.origin.y + r.h / 2) * k) })
     if c then state.colors[L.keys[i]] = { red = c.red, green = c.green, blue = c.blue } end
   end
   save()
 end
 
-local function canvasAt(i)
-  local c = mc.pool[i]
+local function canvasAt(key)
+  local c = mc.pool[key]
   if not c then
     c = hs.canvas.new({ x = 0, y = 0, w = 10, h = 10 })
     c:level(hs.canvas.windowLevels.screenSaver):behavior({ "canJoinAllSpaces", "stationary" })
-    mc.pool[i] = c
+    mc.pool[key] = c
   end
   return c
 end
@@ -331,7 +379,8 @@ local function chipFrame(r, chip)
 end
 
 local function draw(L)
-  hideAll()
+  hideDisplay(L.id)
+  local d = disp(L.id)
   -- room per name = distance between neighbouring centres
   local pitch = L.expanded and 180 or 110
   for i = 2, #L.rects do
@@ -343,7 +392,7 @@ local function draw(L)
     if L.spaces[i] and kind ~= "default" then
       local text, size, lines, sz = fit(name, maxW - 16, L.expanded)
       local chip = { w = math.min(maxW, math.max(r.w + 16, sz.w + 16)), h = lines == 1 and r.h or 30 }
-      local c = canvasAt(i)
+      local c = canvasAt(L.id .. ":" .. i)
       c:frame(chipFrame(r, chip))
       c:replaceElements(
         { type = "rectangle", action = "fill", fillColor = state.colors[L.keys[i]] or { white = 0.35 },
@@ -353,26 +402,57 @@ local function draw(L)
             paragraphStyle = { alignment = "center", lineBreak = "wordWrap" } }) })
       -- Interrupted canvas fades can leave alpha at zero on later shows.
       c:alpha(1):show()
-      mc.chips[i] = chip
+      d.chips[i] = chip
     end
   end
-  mc.drawn, mc.drewAt = true, hs.timer.secondsSinceEpoch()
-  dlog(string.format("draw %d names expanded=%s", #mc.chips, tostring(L.expanded)))
+  d.drawn, mc.drawn, mc.drewAt = true, true, hs.timer.secondsSinceEpoch()
+  dlog(string.format("draw %s names expanded=%s", L.id:sub(1, 8), tostring(L.expanded)))
 end
 
-local function follow(barH, frames)
-  local rects = labelRects(barH, frames)
-  for i, chip in pairs(mc.chips) do
-    if rects[i] then mc.pool[i]:frame(chipFrame(rects[i], chip)) end
+local function follow(B)
+  local d, rects = disp(B.id), labelRects(B.barH, B.frames)
+  for i, chip in pairs(d.chips) do
+    if rects[i] then mc.pool[B.id .. ":" .. i]:frame(chipFrame(rects[i], chip)) end
   end
 end
 
 local onClose
 
+local function tickDisplay(B, now)
+  local d = disp(B.id)
+  local expanded = B.barH > COLLAPSED_H + 8
+  local topY = math.huge
+  for _, f in ipairs(B.frames) do topY = math.min(topY, f.y) end
+  local rising = d.topY and expanded == d.expanded and topY < d.topY - 1
+  d.topY = topY
+  if rising then                                -- the bar is sliding away: Mission Control is closing
+    dlog(string.format("rising %s topY=%.1f", B.id:sub(1, 8), topY))
+    -- Hide during movement, but retry once the bar settles. AX movement
+    -- also happens when expanding/collapsing, not just when exiting.
+    d.sig, d.stillSince = nil, now
+    return hideDisplay(B.id)
+  end
+  if B.sig ~= d.sig then
+    d.sig, d.stillSince = B.sig, now
+    if d.drawn and expanded == d.expanded and #B.frames == d.count then
+      follow(B)                                 -- same layout, sliding in or shifting
+    else
+      hideDisplay(B.id)
+      d.expanded, d.count = expanded, #B.frames
+      local L = layout(B)
+      if allCached(L) then draw(L) end         -- seen before: no wait
+    end
+  elseif not d.drawn and now - (d.stillSince or now) >= SETTLE then
+    local L = layout(B)                        -- new layout, bar has landed
+    sampleColors(L, B.barH)
+    draw(L)
+  end
+end
+
 local function tick()
   mc.ticks = mc.ticks + 1
-  local barH, frames, sig = readBar()
-  if not barH then
+  local bars = readBars()
+  if #bars == 0 then
     -- gone after being seen means closed; before that, give the Dock a moment
     if mc.seenBar or mc.ticks % 10 == 0 then return onClose() end
     return
@@ -380,33 +460,7 @@ local function tick()
   mc.seenBar = true
   local now = hs.timer.secondsSinceEpoch()
   if mc.mouseDown or now < mc.quietUntil or mc.leaving then return end
-  local expanded = barH > COLLAPSED_H + 8
-  local topY = math.huge
-  for _, f in ipairs(frames) do topY = math.min(topY, f.y) end
-  local rising = mc.topY and expanded == mc.expanded and topY < mc.topY - 1
-  mc.topY = topY
-  if rising then                                -- the bar is sliding away: Mission Control is closing
-    dlog(string.format("rising topY=%.1f", topY))
-    -- Hide during movement, but retry once the bar settles. AX movement
-    -- also happens when expanding/collapsing, not just when exiting.
-    mc.sig, mc.stillSince = nil, now
-    return hideAll()
-  end
-  if sig ~= mc.sig then
-    mc.sig, mc.stillSince = sig, now
-    if mc.drawn and expanded == mc.expanded and #frames == mc.count then
-      follow(barH, frames)                      -- same layout, sliding in or shifting
-    else
-      hideAll()
-      mc.expanded, mc.count = expanded, #frames
-      local L = layout(barH, frames)
-      if allCached(L) then draw(L) end         -- seen before: no wait
-    end
-  elseif not mc.drawn and now - mc.stillSince >= SETTLE then
-    local L = layout(barH, frames)             -- new layout, bar has landed
-    sampleColors(L, barH)
-    draw(L)
-  end
+  for _, B in ipairs(bars) do tickDisplay(B, now) end
 end
 
 mc.input = hs.eventtap.new({ hs.eventtap.event.types.leftMouseDown, hs.eventtap.event.types.leftMouseUp,
@@ -428,31 +482,36 @@ mc.input = hs.eventtap.new({ hs.eventtap.event.types.leftMouseDown, hs.eventtap.
   end
   dlog("input type=" .. t .. " key=" .. tostring(t == hs.eventtap.event.types.keyDown and e:getKeyCode() or "-"))
   mc.mouseDown = t == hs.eventtap.event.types.leftMouseDown
-  mc.quietUntil, mc.sig = now + QUIET, nil
+  mc.quietUntil = now + QUIET
   hideAll()
   return false
 end)
 
 -- switching desktops inside Mission Control moves the highlight
 function M.desktopChanged()
-  if mc.timer then hideAll(); mc.sig = nil end
+  if mc.timer then hideAll() end
 end
 
 onClose = function()
   dlog("close ticks=" .. tostring(mc.ticks))
   mc.input:stop()
   if mc.timer then mc.timer:stop(); mc.timer = nil end
-  mc.sig, mc.mouseDown = nil, false
+  mc.mouseDown = false
   hideAll()
 end
 
 local function onOpen()
   if mc.suspended then return end
   if mc.timer then mc.timer:stop() end
-  local wall = hs.screen.mainScreen():desktopImageURL()
+  -- colours are cached per screen, so any screen's wallpaper (or a screen coming or
+  -- going) resets them
+  local walls = {}
+  for _, scr in ipairs(hs.screen.allScreens()) do walls[#walls + 1] = scr:getUUID() .. "=" .. tostring(scr:desktopImageURL()) end
+  table.sort(walls)
+  local wall = table.concat(walls, ";")
   if state.colors.wallpaper ~= wall then state.colors = { wallpaper = wall } end
-  mc.ticks, mc.sig, mc.mouseDown, mc.quietUntil, mc.expanded, mc.count = 0, nil, false, 0, nil, nil
-  mc.seenBar, mc.leaving, mc.topY = false, false, nil
+  mc.ticks, mc.mouseDown, mc.quietUntil, mc.disp = 0, false, 0, {}
+  mc.seenBar, mc.leaving = false, false
   mc.openedAt = hs.timer.secondsSinceEpoch()
   dlog("open")
   hideAll()
@@ -512,8 +571,7 @@ local function reconcile()
     resetSession()
     watchDock()
   end
-  local _, list = spacesBar()
-  if list then
+  if #spacesBars() > 0 then
     if not mc.timer or not mc.timer:running() then onOpen() end
     if not mc.input:isEnabled() then mc.input:start() end
   elseif mc.timer then
