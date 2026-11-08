@@ -335,7 +335,7 @@ local function labelRects(barH, frames)
   for i, f in ipairs(frames) do
     if expanded then
       local w = measure("Desktop " .. i, 15).w + 8
-      rects[i] = { x = f.x + f.w / 2 - w / 2, y = f.y + f.h + 3, w = w, h = 24 }
+      rects[i] = { x = f.x + f.w / 2 - w / 2, y = f.y + f.h + 2, w = w, h = 21 }
     else
       rects[i] = { x = f.x, y = f.y + barH, w = f.w, h = f.h }
     end
