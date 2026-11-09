@@ -314,19 +314,17 @@ local function trimTo(name, size, maxW)
   return text
 end
 
--- one line at the largest size that fits; past that, collapsed labels wrap to two
--- lines at 10.5pt and expanded ones (no room under the thumbnails) trim to one line
+-- always one line: the largest size that fits, else trimmed with an ellipsis
+-- (two-line wraps read as a different, smaller label next to their neighbours)
 local function fit(name, maxW, expanded)
-  for _, size in ipairs(expanded and { 14, 13 } or { 13, 12, 11 }) do
+  local sizes = expanded and { 14, 13 } or { 13, 12, 11, 10 }
+  for _, size in ipairs(sizes) do
     local sz = measure(name, size)
     if sz.w <= maxW then return name, size, 1, sz end
   end
-  if expanded then
-    local text = trimTo(name, 13, maxW)
-    return text, 13, 1, measure(text, 13)
-  end
-  local text = trimTo(name, 10.5, maxW * 1.8)
-  return text, 10.5, 2, measure(text, 10.5)
+  local size = sizes[#sizes]
+  local text = trimTo(name, size, maxW)
+  return text, size, 1, measure(text, size)
 end
 
 -- where each native label sits; expanded labels are measured at their larger size
